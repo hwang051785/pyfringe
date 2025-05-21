@@ -244,6 +244,7 @@ class Reconstruction:
             vc = vc_grid[self.mask]
             up = (unwrap_dist - self.phase_st) * self.pitch_list[-1] / (2 * np.pi)
             up = up[self.mask]
+            
         else:
             unwrap_image = nstep_cp.recover_image_cp(unwrap_vector, self.mask, self.cam_height, self.cam_width)
             
@@ -682,7 +683,7 @@ class Reconstruction:
                                                                                      self.limit,
                                                                                      self.N_list,
                                                                                      False)
-                phase_map[0][phase_map[0] < EPSILON] = phase_map[0][phase_map[0] < EPSILON] + 2 * np.pi
+                phase_map[0][phase_map[0] < EPSILON] = phase_map[0][phase_map[0] < EPSILON] + 2 * cp.pi
                 self.mask = mask
                 unwrap_vector, k_arr, mask = nstep_cp.multifreq_unwrap_cp(self.pitch_list,
                                                                     phase_map,
@@ -707,7 +708,7 @@ class Reconstruction:
                                                   self.N_list[-1],
                                                   cov_arr_h)
                     sigma_sq_delta_phi = ((self.pitch_list[-2]/self.pitch_list[-1])**2 * sigma_sq_phi_l) + sigma_sq_phi
-                    quality = np.pi/np.sqrt(sigma_sq_delta_phi)
+                    quality = cp.pi/cp.sqrt(sigma_sq_delta_phi)
                     quality = cp.asnumpy(quality)
                 else:
                     sigma_sq_phi = None
@@ -828,8 +829,8 @@ def main():
         return
     elif option == "2":
         pitch_list =[1200, 18]
-       # N_list = [3, 3]
         N_list = [3, 3]
+        #N_list = [4, 4]
     elif option == "3":
         pitch_list = [1200, 120, 12]
         N_list = [3, 3, 9]
@@ -872,14 +873,14 @@ def main():
         return
     proj_width = 912  
     proj_height = 1140 
-    cam_width = 1920 
-    cam_height = 1200
+    cam_width = 4096 
+    cam_height = 3000
     type_unwrap = 'multifreq'
-    dark_bias_path = r"C:\Users\kl001\Documents\pyfringe_test\mean_pixel_std\exp_30_fp_42_retake\black_bias\avg_dark.npy"
+    dark_bias_path = r"E:\test2\dark\dark_image_4096_3000.npy"
     #obj_path = r'C:\Users\kl001\Documents\grasshopper3_python\images'
-    obj_path = r"E:\test2"
-    calib_path = r"G:\My Drive\Epistemic_newdata\calibration_100"
-    model_path = r"G:\My Drive\Epistemic_newdata\variance_model.npy"
+    obj_path = r"E:\test2\reconst"
+    calib_path = r"E:\test2\calib"
+    model_path = r"E:\test2\calibration\variance_model.npy"
     reconst_inst = Reconstruction(proj_width=proj_width,
                                   proj_height=proj_height,
                                   cam_width=cam_width,
@@ -903,8 +904,8 @@ def main():
     
     obj_cordi, obj_color, cordi_sigma = reconst_inst.obj_reconst_wrapper()
     # np.save(os.path.join(obj_path,"accuracy_corrected_cord_std.npy"),cordi_sigma)
-    np.save(os.path.join(obj_path,"accuracy_corrected_cord_mean.npy"),obj_cordi)
-    np.save(os.path.join(obj_path,"accuracy_corrected_mask.npy"),reconst_inst.mask)
+    # np.save(os.path.join(obj_path,"accuracy_corrected_cord_mean.npy"),obj_cordi)
+    # np.save(os.path.join(obj_path,"accuracy_corrected_mask.npy"),reconst_inst.mask)
     return
 
 

@@ -8,7 +8,7 @@ import os
 from typing import Tuple
 import pickle
 import cv2
-
+import matplotlib.pyplot as plt
 def delta_deck_gen(N: int,
                    height: int,
                    width: int) -> np.ndarray:
@@ -753,6 +753,7 @@ def bilinear_interpolate(image, x, y,  sigmasq_image=None):
     x1 = x0 + 1
     y0 = np.floor(y).astype(int)
     y1 = y0 + 1
+    
     image_a = image[y0, x0]
     image_b = image[y1, x0]
     image_c = image[y0, x1]
@@ -775,12 +776,9 @@ def bilinear_interpolate(image, x, y,  sigmasq_image=None):
     return new_image, int_pred_var
 
 def undistort(image, camera_mtx, camera_dist, sigmasq_image=None): # image with nan values after undistorting and applying interpolation creates nan values
-    # no_img = image.shape[0]
     u = np.arange(0, image.shape[1])
     v = np.arange(0, image.shape[0])
     uc, vc = np.meshgrid(u, v)
-    # uc = np.repeat(uc[np.newaxis,:,:],no_img,axis=0)
-    # vc = np.repeat(vc[np.newaxis,:,:],no_img,axis=0)
     x = (uc - camera_mtx[0, 2])/camera_mtx[0, 0]
     y = (vc - camera_mtx[1, 2])/camera_mtx[1, 1]
     r_sq = x**2 + y**2
@@ -788,7 +786,7 @@ def undistort(image, camera_mtx, camera_dist, sigmasq_image=None): # image with 
     y_double_dash = y*(1 + camera_dist[0, 0] * r_sq + camera_dist[0, 1] * r_sq**2)
     map_x = x_double_dash * camera_mtx[0, 0] + camera_mtx[0, 2]
     map_y = y_double_dash * camera_mtx[1, 1] + camera_mtx[1, 2]
-    undistort_image, image_var = bilinear_interpolate(image, map_x, map_y, sigmasq_image) 
+    undistort_image, image_var = bilinear_interpolate(image, map_x, map_y, sigmasq_image)
     return undistort_image, image_var
 # =====================================================
 # For diagnosis

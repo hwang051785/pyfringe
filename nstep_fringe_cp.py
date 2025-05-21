@@ -5,7 +5,7 @@ from time import perf_counter_ns
 from typing import Tuple
 from cupyx.scipy import ndimage
 import pickle
-
+import matplotlib.pyplot as plt
 
 def pred_var_fn(images, model):
     """
@@ -322,12 +322,12 @@ def bilinear_interpolate_cp(image: cp.ndarray,
     -------
     Subpixel mapped absolute value and corresponding variance map.
     """
-   
     # neighbours
     x0 = cp.floor(x).astype(int)
     x1 = x0 + 1
     y0 = cp.floor(y).astype(int)
     y1 = y0 + 1
+    
     image_a = image[y0, x0]
     image_b = image[y1, x0]
     image_c = image[y0, x1]
@@ -345,7 +345,6 @@ def bilinear_interpolate_cp(image: cp.ndarray,
         pred_var_d = sigmasq_image[y1, x1]
         int_pred_var = wa ** 2 * pred_var_a + wb ** 2 * pred_var_b + wc ** 2 * pred_var_c + wd ** 2 * pred_var_d
     else:
-        print("True")
         int_pred_var = None
     return new_image, int_pred_var
 

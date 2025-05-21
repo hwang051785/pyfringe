@@ -7,7 +7,7 @@ Created on Mon Jan  9 14:14:57 2023
 import os
 import sys
 import numpy as np
-import gspy
+import blkfly
 import lcpy
 import cv2
 import glob
@@ -38,7 +38,7 @@ Pattern exposure time should be integeral multiple of 8333 to avoid systematic e
 
 The minimum black fill time depends on the larger value of 
 1) the DMD pattern loading time (230 us from the TI document) and 
-2) the camera sensor readout time (conservatively 6250 us for Grasshopper3 GS3-U3-23S6M-C 163 FPS), hence our system uses 6250 us as the minimum black fill time.
+2) the camera sensor readout time (conservatively 66666 us forBlackfly S BFS-U3-244S8C 15 FPS), hence our system uses 67250 us as the minimum black fill time.
 
 The projector's 8-bit pattern frame period should satisfy the following requirement to accommodate image buffer loading:
 (8-bit pattern frame period x 3) >= (worst/longest 24-bit image loading time)
@@ -47,13 +47,12 @@ Hence the workflow should be:
 1) the 24-bit image loading time should be characterized for all images, 
 2) find the worst case and then add a small time period to it, say 500 us 
 3) divide the resulting number by three as the 8-bit pattern frame period
-4) exposure time <= (8-bit pattern frame period) - 6250 us, to avoid over exposure, usually a smaller number of preferred. 
+4) exposure time <= (8-bit pattern frame period) - 67250 us, to avoid over exposure, usually a smaller number of preferred. 
 
 Also camera requires certain time to activate its trigger mode, this issue is currently fixed by adding a sleep time after sending the trigger activation command
 and before starting the projector. If this is not set the camera may drop some initial frames while switching between preview and acquisition mode.
 """
-#def update_scroll():
-    
+
 def proj_cam_preview(cam, 
                      nodemap,
                      s_node_map,
@@ -106,7 +105,7 @@ def proj_cam_preview(cam,
                                             frame_period=proj_frame_period)
     # config camera trigger for preview
     if cam_trig_reconfig:
-        result &= gspy.trigger_configuration(nodemap=nodemap,
+        result &= blkfly.trigger_configuration(nodemap=nodemap,
                                              s_node_map=s_node_map,
                                              triggerType="off",
                                              verbose=pprint_status)
@@ -129,7 +128,7 @@ def proj_cam_preview(cam,
                                        led_select=led_select,
                                        swap_location_list=[0],
                                        image_index_list=[image_index],
-                                       pattern_num_list=[2],
+                                       pattern_num_list=[0],
                                        starting_address=0,
                                        do_insert_black=False)
 
@@ -148,13 +147,9 @@ def proj_cam_preview(cam,
         max_int = 0
         result &= lcr.pattern_display('start')
         cam.BeginAcquisition()
-        
-        # cv2.createTrackbar('x','press q to quit',0, 2*center_x, update_scroll)
-        # cv2.createTrackbar('y','press q to quit',0, 2*center_y, update_scroll)
         while True:                
-            ret, frame = gspy.capture_image(cam)       
-           # img_show = cv2.resize(frame, None, fx=0.3, fy=0.3)#fx=0.3, fy=0.3
-            img_show=frame
+            ret, frame = blkfly.capture_image(cam)       
+            img_show = cv2.resize(frame, None, fx=0.5, fy=0.5)
             mean_lst.append(img_show)
             if len(mean_lst) == 20:
                 mean_intensity = np.mean(np.array(mean_lst),axis=0)
@@ -176,14 +171,13 @@ def proj_cam_preview(cam,
             # cv2.putText(img_show_color,'Delta:%s'%str(delta_time),(0,100),font,1,(0,255,255),2)
             cv2.putText(img_show_color,'Max intensity:%s'%str(max_int),(0,150),font,1,(0,255,255),2)
             cv2.imshow("press q to quit", img_show_color)
-           
             key = cv2.waitKey(1)
             if key ==ord("+"): # to be changed
                 proj_exposure_period +=delta_time
-                result &= gspy.setExposureTime(nodemap, exposureTime=proj_exposure_period)
+                result &= blkfly.setExposureTime(nodemap, exposureTime=proj_exposure_period)
             elif key == ord("-"):
                 proj_exposure_period -=delta_time
-                result &= gspy.setExposureTime(nodemap, exposureTime=proj_exposure_period)
+                result &= blkfly.setExposureTime(nodemap, exposureTime=proj_exposure_period)
             elif key == ord(">"):
                 delta_time +=1
             elif key == ord("<"):
@@ -316,11 +310,11 @@ def run_proj_cam_capt(cam,
         result &= False
 
     # config camera trigger for image acquisition
-    result &= gspy.trigger_configuration(nodemap=nodemap,
+    result &= blkfly.trigger_configuration(nodemap=nodemap,
                                          s_node_map=s_node_map,
                                          triggerType='hardware')
     if result:
-        gspy.activate_trigger(nodemap)
+        blkfly.activate_trigger(nodemap)
         sleep(0.05)
         cam.BeginAcquisition()
         start = perf_counter_ns()
@@ -339,7 +333,7 @@ def run_proj_cam_capt(cam,
                                                   'capt_%03d_%06d.tiff' % (acquisition_index, count))
                 else:
                     save_path_tiff = None
-                ret, image_array = gspy.capture_image(cam=cam, save_path=save_path_tiff, return_array=return_array)
+                ret, image_array = blkfly.capture_image(cam=cam, save_path=save_path_tiff, return_array=return_array)
             except PySpin.SpinnakerException as ex:
                 print('Error: %s' % ex)
                 ret = False
@@ -381,7 +375,7 @@ def run_proj_cam_capt(cam,
                 print('Last section of scanned images saved as %s' % save_path)
 
         cam.EndAcquisition()
-        gspy.deactivate_trigger(nodemap)
+        blkfly.deactivate_trigger(nodemap)
         total_dual_time_end = perf_counter_ns()
         total_dual_time = (total_dual_time_end - total_dual_time_start)/1e9
         print('Total dual device time:%.3f' % total_dual_time)
@@ -467,7 +461,7 @@ def proj_cam_acquire_images(cam,
     nodemap = cam.GetNodeMap()
     nodemap_tldevice = cam.GetTLDeviceNodeMap()
     s_node_map = cam.GetTLStreamNodeMap()
-    gspy.print_device_info(nodemap_tldevice)
+    blkfly.print_device_info(nodemap_tldevice)
     frameRate = 1e6/proj_frame_period  # proj_frame_period is in μs
     
     proj_preview_exp_period = proj_exposure_period 
@@ -475,7 +469,7 @@ def proj_cam_acquire_images(cam,
     result = True
     ret = True
     # config camera
-    result &= gspy.cam_configuration(nodemap=nodemap,
+    result &= blkfly.cam_configuration(nodemap=nodemap,
                                      s_node_map=s_node_map,
                                      frameRate=frameRate,
                                      pgrExposureCompensation=cam_ExposureCompensation,
@@ -652,14 +646,14 @@ def run_proj_single_camera(savedir,
                            cam_capt_timeout=10,
                            cam_black_level=0,
                            cam_ExposureCompensation=0,
-                           proj_exposure_period=27084,
-                           proj_frame_period=33334,
+                           proj_exposure_period=79000,
+                           proj_frame_period=350000,
                            do_insert_black=True,
                            led_select=4,
                            preview_image_index=21,
                            number_scan=1,
                            acquisition_index=0,
-                           preview_option='Once',
+                           preview_option='Always',
                            focus_image_index=None,
                            image_section_size=None,
                            pprint_status=True,
@@ -717,10 +711,10 @@ def run_proj_single_camera(savedir,
     :rtype :bool
     """
     try:
-        result, system, cam_list, num_cameras = gspy.sysScan()
+        result, system, cam_list, num_cameras = blkfly.sysScan()
         cam = cam_list[0]
         if clear_dir:
-            gspy.clearDir(savedir)
+            blkfly.clearDir(savedir)
         device = usb.core.find(idVendor=0x0451, idProduct=0x6401)  # find the projector usb port
         device.set_configuration()
 
@@ -793,7 +787,7 @@ def gamma_curve(gamma_image_index_list,
                                     cam_black_level=0,
                                     cam_ExposureCompensation=0,
                                     proj_exposure_period=30000,#25000,
-                                    proj_frame_period=70000,
+                                    proj_frame_period=40000,
                                     do_insert_black=True,
                                     led_select=4,
                                     preview_image_index=30,
@@ -843,11 +837,11 @@ def calib_capture(image_index_list,
                                     cam_capt_timeout=10,
                                     cam_black_level=0,
                                     cam_ExposureCompensation=0,
-                                    proj_exposure_period=9000,
-                                    proj_frame_period=34000,#66668,#33334,
+                                    proj_exposure_period=30000,
+                                    proj_frame_period=40000,#66668,#33334,
                                     do_insert_black=True,
                                     led_select=2,
-                                    preview_image_index=25,#20,
+                                    preview_image_index=18,#20,
                                     focus_image_index=None,
                                     image_section_size=None,
                                     pprint_status=True,
@@ -859,9 +853,9 @@ def meanpixel_var(savedir,
                   pattern_no,
                   no_images,
                   proj_exposure_period=27000,
-                  proj_frame_period=70000,
-                  cam_width=4096,
-                  cam_height=3000,
+                  proj_frame_period=34000,
+                  cam_width=1920,
+                  cam_height=1200,
                   half_cross_length=100,
                   acquisition_index=0):
     """
@@ -910,7 +904,6 @@ def meanpixel_var(savedir,
                                     save_npy=False,
                                     save_tiff=True)
     mean_var_pixel = None
-    
     if result:
         path = sorted(glob.glob(os.path.join(savedir,'capt_%03d_*.tiff'%acquisition_index)),key=lambda x:int(os.path.basename(x)[-11:-5]))
         n_scanned_image_list = np.array([cv2.imread(file,0) for file in path])
@@ -934,7 +927,7 @@ def optimal_frame_rate(image_indices, no_iterations):
         result, time_list_microsec = lcr.image_loading_time(image_indices)
         max_time_list.append(max(time_list_microsec))
     pattern_frame_period = (max(max_time_list) + 500)/3
-    pattern_exposure_period = pattern_frame_period - 6250
+    pattern_exposure_period = pattern_frame_period - 67250
     print('Approx. 8 bit pattern frame period = %6.3f' % pattern_frame_period)
     print('Approx. 8 bit pattern exposure period = %6.3f' % pattern_exposure_period)
     device.reset()
@@ -949,129 +942,33 @@ def main():
     option = input("Please choose:\n1: test\n2: Approx.frame period and exposure time\n3: gamma curve\n4: Camera noise\n5: calibration capture\n6: Reconstruction ")
     result = True
     if option == '1':
-        image_index_list = np.repeat(np.array([17,19,21,23,24,25]),3).tolist()
-        pattern_num_list = [0, 1, 2] * len(set(image_index_list))
-        savedir = r'C:\Users\kl001\Documents\grasshopper3_python\images'
-        result &= run_proj_single_camera(savedir=savedir,
-                                         preview_option='Always',
-                                         number_scan=1,
-                                         acquisition_index=0,
-                                         image_index_list=image_index_list,
-                                         pattern_num_list=pattern_num_list,
-                                         cam_gain=0,
-                                         cam_bufferCount=15,
-                                         cam_capt_timeout=10,
-                                         cam_black_level=0,
-                                         cam_ExposureCompensation=0,
-                                         proj_exposure_period=27000,#27084,
-                                         proj_frame_period=70000,#33334,
-                                         do_insert_black=True,
-                                         led_select=2,
-                                         preview_image_index=16,
-                                         focus_image_index=29,
-                                         image_section_size=None,
-                                         pprint_status=True,
-                                         save_npy=False,
-                                         save_tiff=True)
-    elif option == '2':
-        starting_index = int(input("\nEnter starting image index of the sequence:"))
-        no_images = int(input("\nEnter number of images in the sequence:"))
-        no_iterations = int(input("\nNo. of iterations:"))
-        image_indices = np.arange(starting_index, starting_index+no_images).tolist()
-        result &= optimal_frame_rate(image_indices, no_iterations)
-    elif option == '3':
-        gamma_image_index_list = np.repeat(np.arange(2, 19), 3).tolist()
-        gamma_pattern_num_list = [0, 1, 2] * len(set(gamma_image_index_list))
-        #savedir = r'C:\Users\kl001\Documents\pyfringe_test\gamma_images'
-        #savedir = r"E:\promv_proj_test\constant_intensity_gamma_response"
-        savedir= r"E:\test2\dark"
-        result &= gamma_curve(gamma_image_index_list,
-                              gamma_pattern_num_list,
-                              savedir,
-                              cam_width=4096,
-                              cam_height=3000,
-                              half_cross_length=100)
-    elif option == '4':
-        image_index = int(input("\nImage index to be used:")) #image 18; pattern:200, 205, 210
-        pattern_no = int(input("\nPattern number:"))
-        no_images = int(input("\nNo. of iterations:"))
-        acquisition_index=int(input("\nAcquisation index"))
-       # savedir = r'C:\Users\kl001\Documents\pyfringe_test\mean_pixel_std'
-        savedir = r"E:\test2\dark"
-        meanpixel_var(savedir,
-                      image_index,
-                      pattern_no,
-                      no_images,
-                      cam_width=4096,
-                      cam_height=3000,
-                      half_cross_length=100,
-                      acquisition_index=acquisition_index)
-        
-    elif option == '5':
-        #image_index_list = np.repeat(np.arange(0, 12), 3).tolist()
-        #predistorted
-        #image_index_list = np.repeat(np.arange(21, 33), 3).tolist()
-        #all corrected firmware
-        image_index_list = np.repeat(np.arange(0, 12), 3).tolist()
-        pattern_num_list = [0, 1, 2] * len(set(image_index_list))
-        savedir = r"E:\test2\calib"
-        #microfirmware
-        # image_index_list = np.repeat(np.arange(19, 31), 3).tolist()
-        # pattern_num_list = [0, 1, 2] * len(set(image_index_list))
-        savedir = r'E:\test2\BFY\calib'
-        number_scan = int(input("\nEnter number of scans"))
-        acquisition_index = int(input("\nEnter acquisition index"))
-        result &= calib_capture(image_index_list=image_index_list,
-                                pattern_num_list=pattern_num_list,
-                                savedir=savedir,
-                                number_scan=number_scan,
-                                acquisition_index=acquisition_index)
-    elif option == '6':
-        no_of_levels =input("\nNo. of levels 2,3,4:")
-        number_scan = int(input("\nEnter number of scans"))
-        if no_of_levels == "2":
-            #review
-            # image_index_list = np.repeat([5,6,7,8], 3).tolist()#np.repeat([30,35], 3).tolist()
-            # pattern_num_list = [0, 1, 2] * len(set(image_index_list))
-            # image_index_list = np.repeat([18,19], 3).tolist()#np.repeat([30,35], 3).tolist()
-            # pattern_num_list = [0, 1, 2] * len(set(image_index_list))
-            image_index_list = np.repeat([23,24], 3).tolist()#np.repeat([30,35], 3).tolist()
-            pattern_num_list = [0, 1, 2] * len(set(image_index_list))
-        elif no_of_levels == "3":
-            # image_index_list = np.repeat(np.arange(30, 35), 3).tolist()
-            # pattern_num_list = [0, 1, 2] * len(set(image_index_list))
-            image_index_list = np.repeat(np.arange(18, 23), 3).tolist()
-            pattern_num_list = [0, 1, 2] * len(set(image_index_list))
-        elif no_of_levels == "4" :
-            # image_index_list = np.repeat(np.array([12,13,14,15,16,17]),3).tolist()
-            # pattern_num_list = [0, 1, 2] * len(set(image_index_list))
-            image_index_list = np.repeat(np.arange(12,18),3).tolist()
-            pattern_num_list = [0, 1, 2] * len(set(image_index_list))
-        #savedir = r'C:\Users\kl001\Documents\grasshopper3_python\images'
-        #savedir = r"E:\test\reconst"
-        #savedir = r"E:\test2\reconst"
-        savedir = r"E:\test2\BFY\reconst"
-        result &= run_proj_single_camera(savedir=savedir,
-                                         preview_option='Once',
-                                         number_scan=number_scan,
-                                         acquisition_index=0,
-                                         image_index_list=image_index_list,
-                                         pattern_num_list=pattern_num_list,
-                                         cam_gain=0,
-                                         cam_bufferCount=15,
-                                         cam_capt_timeout=10,
-                                         cam_black_level=0,
-                                         cam_ExposureCompensation=0,
-                                         proj_exposure_period=9000,#27084,Check option 2 for recomended value, default is 30000.
-                                         proj_frame_period=34000,#34000,#33334,
-                                         do_insert_black=True,
-                                         led_select=2,
-                                         preview_image_index=25,#actual 20,
-                                         focus_image_index=None,
-                                         image_section_size=None,
-                                         pprint_status=True,
-                                         save_npy=False,
-                                         save_tiff=True)
+       # image_index_list = np.repeat(np.array([17,19,21,23,24,25]),3).tolist()
+       # pattern_num_list = [0, 1, 2] * len(set(image_index_list))
+       image_index_list = np.repeat(np.arange(0, 12), 3).tolist()
+       pattern_num_list = [0, 1, 2] * len(set(image_index_list))
+       savedir = r'E:\test2\BFY'
+       result &= run_proj_single_camera(savedir=savedir,
+                                        preview_option='Always',
+                                        number_scan=1,
+                                        acquisition_index=0,
+                                        image_index_list=image_index_list,
+                                        pattern_num_list=pattern_num_list,
+                                        cam_gain=0,
+                                        cam_bufferCount=15,
+                                        cam_capt_timeout=10,
+                                        cam_black_level=0,
+                                        cam_ExposureCompensation=0,
+                                        proj_exposure_period=79000,#79000,
+                                        proj_frame_period=350000,#350000,
+                                        do_insert_black=True,
+                                        led_select=2,
+                                        preview_image_index=16,
+                                        focus_image_index=29,
+                                        image_section_size=None,
+                                        pprint_status=True,
+                                        save_npy=False,
+                                        save_tiff=True)
+
     
     return result 
 

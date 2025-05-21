@@ -1245,7 +1245,7 @@ def proj_pattern_LUT(image_index_list,
             result = True
             result &= lcr.pattern_display('stop')        
             result &= lcr.set_pattern_config(num_lut_entries=len(image_index_list),
-                                             do_repeat=False,
+                                             do_repeat=True,
                                              num_pats_for_trig_out2=len(image_index_list),
                                              num_images=len(image_LUT_entries))
             result &= lcr.set_exposure_frame_period(exposure_period=exposure_period, 
@@ -1305,7 +1305,9 @@ def main():
             image_index_list = np.repeat(np.arange(0, 5), 3).tolist()
         pattern_num_list = [0, 1, 2] * len(set(image_index_list))
         result &= proj_pattern_LUT(image_index_list,
-                                   pattern_num_list)
+                                   pattern_num_list,
+                                   exposure_period=10000,
+                                   frame_period=10000)
     if option == "3":
         current_setting()
     return result

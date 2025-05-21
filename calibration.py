@@ -843,7 +843,7 @@ class Calibration:
         # Filter by Area.
         blobParams.filterByArea = True
         blobParams.minArea = self.bobdetect_areamin  # 2000
-        
+        blobParams.minArea = 20000
         # Convexity
         blobParams.filterByConvexity = True
         blobParams.minConvexity = self.bobdetect_convexity
@@ -1806,16 +1806,16 @@ def main():
     # proj properties
     proj_width = 912
     proj_height = 1140  # 800 1280 912 1140
-    cam_width = 1920
-    cam_height = 1200
+    cam_width = 4096
+    cam_height = 3000
     fx=1 
     fy=2
     # type of unwrapping
     type_unwrap = 'multifreq'
 
     # circle detection parameters
-    bobdetect_areamin = 100
-    bobdetect_convexity = 0.75
+    bobdetect_areamin = 400
+    bobdetect_convexity = 0.7
 
     # calibration board properties
     dist_betw_circle = 25  # Distance between centers
@@ -1826,13 +1826,18 @@ def main():
     # reconstruction point clouds will also be saved in the same path
     #root_dir = r'C:\Users\kl001\Documents\pyfringe_test'
     #root_dir = r"G:\.shortcut-targets-by-id\11ZFqyAr3JhvpSlWJ7UpG0kR4sVloyf83\structured_light\calibr_data\geometric_calib"
-    path = r"G:\My Drive\Epistemic_newdata\calibration_100"
+    path = r"E:\test2\calib"
     data_type = 'npy'
-    processing = 'gpu'
-    dark_bias_path =  r"C:\Users\kl001\Documents\pyfringe_test\mean_pixel_std\exp_30_fp_42_retake\black_bias\avg_dark.npy"
+    processing = 'cpu'
+    dark_bias_path =  r"E:\test2\dark\dark_image_4096_3000.npy"
     #model_path = r"C:\Users\kl001\Documents\pyfringe_test\mean_pixel_std\exp_30_fp_42_retake\const_tiff\calib_fringes\variance_model.npy"
     model_path = r"E:\review_data\intensity_calib\variance_model.npy"
-    model = cp.load(model_path)
+    if data_type == "npy":
+        model = np.load(model_path)
+    elif data_type == "gpu":
+        model = cp.load(model_path)
+    else:
+        print("Invalid data type:%s"%data_type)
     # multi wavelength unwrapping parameters
     if type_unwrap == 'multiwave':
         pitch_list = [139, 21, 18]
@@ -1849,7 +1854,7 @@ def main():
         kernel_v = 7
         kernel_h = 7
 
-    limit =10
+    limit =5
     # Instantiate calibration class
 
     calib_inst = Calibration(proj_width=proj_width, 

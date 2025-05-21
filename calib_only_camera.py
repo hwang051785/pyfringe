@@ -1,5 +1,12 @@
 # -*- coding: utf-8 -*-
 """
+Created on Thu Mar 20 14:35:17 2025
+
+@author: kl001
+"""
+
+# -*- coding: utf-8 -*-
+"""
 Created on Mon Jan  9 14:14:57 2023
 
 @author: kl001
@@ -153,8 +160,7 @@ def proj_cam_preview(cam,
         # cv2.createTrackbar('y','press q to quit',0, 2*center_y, update_scroll)
         while True:                
             ret, frame = gspy.capture_image(cam)       
-           # img_show = cv2.resize(frame, None, fx=0.3, fy=0.3)#fx=0.3, fy=0.3
-            img_show=frame
+            img_show = cv2.resize(frame, None, fx=0.3, fy=0.3)
             mean_lst.append(img_show)
             if len(mean_lst) == 20:
                 mean_intensity = np.mean(np.array(mean_lst),axis=0)
@@ -843,8 +849,8 @@ def calib_capture(image_index_list,
                                     cam_capt_timeout=10,
                                     cam_black_level=0,
                                     cam_ExposureCompensation=0,
-                                    proj_exposure_period=9000,
-                                    proj_frame_period=34000,#66668,#33334,
+                                    proj_exposure_period=30000,
+                                    proj_frame_period=70000,#66668,#33334,
                                     do_insert_black=True,
                                     led_select=2,
                                     preview_image_index=25,#20,
@@ -854,6 +860,38 @@ def calib_capture(image_index_list,
                                     save_npy=True,
                                     save_tiff=False)
     return result
+
+def calib_camera_capture(image_index_list,
+                  pattern_num_list,
+                  savedir,
+                  number_scan,
+                  acquisition_index):
+    """
+    Function to capture calibration images.
+    """
+    result = run_proj_single_camera(savedir=savedir,
+                                    preview_option='Always',
+                                    number_scan=number_scan,
+                                    acquisition_index=acquisition_index,
+                                    image_index_list=image_index_list,
+                                    pattern_num_list=pattern_num_list,
+                                    cam_gain=0,
+                                    cam_bufferCount=15,
+                                    cam_capt_timeout=10,
+                                    cam_black_level=0,
+                                    cam_ExposureCompensation=0,
+                                    proj_exposure_period=30000,
+                                    proj_frame_period=70000,#66668,#33334,
+                                    do_insert_black=True,
+                                    led_select=2,
+                                    preview_image_index=25,#20,
+                                    focus_image_index=None,
+                                    image_section_size=None,
+                                    pprint_status=True,
+                                    save_npy=False,
+                                    save_tiff=True)
+    return result
+
 def meanpixel_var(savedir,
                   image_index,
                   pattern_no,
@@ -946,10 +984,10 @@ def main():
     """
     Example main function.
     """
-    option = input("Please choose:\n1: test\n2: Approx.frame period and exposure time\n3: gamma curve\n4: Camera noise\n5: calibration capture\n6: Reconstruction ")
+    option = input("Please choose:\n1: test\n2: Approx.frame period and exposure time\n3: gamma curve\n4: Camera noise\n5: calibration capture\n6: Reconstruction \n7: Camera calibration with one pattern")
     result = True
     if option == '1':
-        image_index_list = np.repeat(np.array([17,19,21,23,24,25]),3).tolist()
+        image_index_list = np.repeat(25,6).tolist()
         pattern_num_list = [0, 1, 2] * len(set(image_index_list))
         savedir = r'C:\Users\kl001\Documents\grasshopper3_python\images'
         result &= run_proj_single_camera(savedir=savedir,
@@ -964,11 +1002,11 @@ def main():
                                          cam_black_level=0,
                                          cam_ExposureCompensation=0,
                                          proj_exposure_period=27000,#27084,
-                                         proj_frame_period=70000,#33334,
+                                         proj_frame_period=90000,#33334,
                                          do_insert_black=True,
                                          led_select=2,
-                                         preview_image_index=16,
-                                         focus_image_index=29,
+                                         preview_image_index=25,
+                                         focus_image_index=None,
                                          image_section_size=None,
                                          pprint_status=True,
                                          save_npy=False,
@@ -1008,24 +1046,24 @@ def main():
                       acquisition_index=acquisition_index)
         
     elif option == '5':
-        #image_index_list = np.repeat(np.arange(0, 12), 3).tolist()
-        #predistorted
-        #image_index_list = np.repeat(np.arange(21, 33), 3).tolist()
-        #all corrected firmware
-        image_index_list = np.repeat(np.arange(0, 12), 3).tolist()
-        pattern_num_list = [0, 1, 2] * len(set(image_index_list))
-        savedir = r"E:\test2\calib"
-        #microfirmware
-        # image_index_list = np.repeat(np.arange(19, 31), 3).tolist()
-        # pattern_num_list = [0, 1, 2] * len(set(image_index_list))
-        savedir = r'E:\test2\BFY\calib'
-        number_scan = int(input("\nEnter number of scans"))
-        acquisition_index = int(input("\nEnter acquisition index"))
-        result &= calib_capture(image_index_list=image_index_list,
-                                pattern_num_list=pattern_num_list,
-                                savedir=savedir,
-                                number_scan=number_scan,
-                                acquisition_index=acquisition_index)
+       #image_index_list = np.repeat(np.arange(0, 12), 3).tolist()
+       #predistorted
+       #image_index_list = np.repeat(np.arange(21, 33), 3).tolist()
+       #all corrected firmware
+       image_index_list = np.repeat(np.arange(0, 12), 3).tolist()
+       pattern_num_list = [0, 1, 2] * len(set(image_index_list))
+       savedir = r"E:\test2\calib"
+       #microfirmware
+       # image_index_list = np.repeat(np.arange(19, 31), 3).tolist()
+       # pattern_num_list = [0, 1, 2] * len(set(image_index_list))
+       #savedir = r'G:\My Drive\micro_calibration'
+       number_scan = int(input("\nEnter number of scans"))
+       acquisition_index = int(input("\nEnter acquisition index"))
+       result &= calib_capture(image_index_list=image_index_list,
+                               pattern_num_list=pattern_num_list,
+                               savedir=savedir,
+                               number_scan=number_scan,
+                               acquisition_index=acquisition_index)
     elif option == '6':
         no_of_levels =input("\nNo. of levels 2,3,4:")
         number_scan = int(input("\nEnter number of scans"))
@@ -1049,8 +1087,7 @@ def main():
             pattern_num_list = [0, 1, 2] * len(set(image_index_list))
         #savedir = r'C:\Users\kl001\Documents\grasshopper3_python\images'
         #savedir = r"E:\test\reconst"
-        #savedir = r"E:\test2\reconst"
-        savedir = r"E:\test2\BFY\reconst"
+        savedir = r"E:\test2\reconst"
         result &= run_proj_single_camera(savedir=savedir,
                                          preview_option='Once',
                                          number_scan=number_scan,
@@ -1062,8 +1099,8 @@ def main():
                                          cam_capt_timeout=10,
                                          cam_black_level=0,
                                          cam_ExposureCompensation=0,
-                                         proj_exposure_period=9000,#27084,Check option 2 for recomended value, default is 30000.
-                                         proj_frame_period=34000,#34000,#33334,
+                                         proj_exposure_period=30000,#27084,Check option 2 for recomended value, default is 30000.
+                                         proj_frame_period=70000,#34000,#33334,
                                          do_insert_black=True,
                                          led_select=2,
                                          preview_image_index=25,#actual 20,
@@ -1072,6 +1109,25 @@ def main():
                                          pprint_status=True,
                                          save_npy=False,
                                          save_tiff=True)
+    elif option == '7':
+            #image_index_list = np.repeat(np.arange(0, 12), 3).tolist()
+            #predistorted
+            #image_index_list = np.repeat(np.arange(21, 33), 3).tolist()
+            #all corrected firmware
+            image_index_list = np.repeat(25, 1).tolist()
+            pattern_num_list = [0] * len(set(image_index_list))
+            savedir = r"E:\test2\calib_camera"
+            #microfirmware
+            # image_index_list = np.repeat(np.arange(19, 31), 3).tolist()
+            # pattern_num_list = [0, 1, 2] * len(set(image_index_list))
+            #savedir = r'G:\My Drive\micro_calibration'
+            number_scan = int(input("\nEnter number of scans"))
+            acquisition_index = int(input("\nEnter acquisition index"))
+            result &= calib_camera_capture(image_index_list=image_index_list,
+                                    pattern_num_list=pattern_num_list,
+                                    savedir=savedir,
+                                    number_scan=number_scan,
+                                    acquisition_index=acquisition_index)
     
     return result 
 

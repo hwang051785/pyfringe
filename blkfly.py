@@ -1,9 +1,19 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Nov 12 14:00:33 2024
+
+@author: Desktop
+"""
+
+
 # coding=utf-8
-#TODO: Impliment adjusting camera resolution
 import os
 import PySpin
 import sys
 import cv2
+import usb.core
+import lcpy
+import numpy as np
 from time import perf_counter_ns
 
 
@@ -53,9 +63,9 @@ def capture_image(cam, timeout=1000, save_path=None, return_array=True):
 
 def cam_configuration(nodemap,
                       s_node_map,
-                      frameRate=15,
+                      frameRate=10,
                       pgrExposureCompensation=0,
-                      exposureTime=27084,
+                      exposureTime=10000,
                       gain=0,
                       blackLevel=0,
                       bufferCount=15,
@@ -92,19 +102,20 @@ def cam_configuration(nodemap,
 
     print('\n=================== Config camera ==============================================\n')
     result = True
+    ## find AcquisitionMode
     AcquisitionMode = get_IEnumeration_node_current_entry_name(nodemap, 'AcquisitionMode', verbose=False)
     if not (AcquisitionMode == 'Continuous'):
         result &= setAcquisitionMode(nodemap, AcquisitionModeName='Continuous')
-    OnBoardColorProcessEnabled = get_IBoolean_node_current_val(nodemap, 'OnBoardColorProcessEnabled', verbose=False)
-    if OnBoardColorProcessEnabled:
-        result &= disableOnBoardColorProcess(nodemap)
-    if frameRate is not None:
-        result &= setFrameRate(nodemap, frameRate=frameRate)
-    ExposureCompensationAuto = get_IEnumeration_node_current_entry_name(nodemap, 'pgrExposureCompensationAuto', verbose=False)
-    if not (ExposureCompensationAuto == 'Off'):
-        result &= disableExposureCompensationAuto(nodemap)
-    if pgrExposureCompensation is not None:
-        result &= setExposureCompensation(nodemap, pgrExposureCompensation=pgrExposureCompensation)
+    # TODO:
+    ## find frame rate
+    # if frameRate is not None:
+    #     result &= setFrameRate(nodemap, frameRate=frameRate)
+    # ExposureCompensationAuto = get_IEnumeration_node_current_entry_name(nodemap, 'pgrExposureCompensationAuto', verbose=False)
+    # if not (ExposureCompensationAuto == 'Off'):
+    #     result &= disableExposureCompensationAuto(nodemap)
+    # if pgrExposureCompensation is not None:
+    #     result &= setExposureCompensation(nodemap, pgrExposureCompensation=pgrExposureCompensation)
+    ## find exposure mode
     if exposureTime is not None:
         result &= setExposureTime(nodemap, exposureTime=exposureTime)
     if gain is not None:
@@ -125,9 +136,8 @@ def acquire_images(cam,
                    num_images,
                    savedir,
                    triggerType,
-                   frameRate=30,
-                   pgrExposureCompensation=0,
-                   exposureTime=27084,
+                   frameRate=10,
+                   exposureTime=10000,
                    gain=0,
                    blackLevel=0,
                    bufferCount=15,
@@ -174,6 +184,7 @@ def acquire_images(cam,
     nodemap_tldevice = cam.GetTLDeviceNodeMap()
     s_node_map = cam.GetTLStreamNodeMap()
     
+    
     if verbose:
         print_device_info(nodemap_tldevice)
         print_camera_config(nodemap, s_node_map)
@@ -185,7 +196,6 @@ def acquire_images(cam,
     result &= cam_configuration(nodemap=nodemap,
                                 s_node_map=s_node_map,
                                 frameRate=frameRate,
-                                pgrExposureCompensation=pgrExposureCompensation,
                                 exposureTime=exposureTime,
                                 gain=gain,
                                 blackLevel=blackLevel,
@@ -202,60 +212,72 @@ def acquire_images(cam,
     cam.BeginAcquisition()
     while True:
         ret, frame = capture_image(cam)
-        img_show = cv2.resize(frame, None, fx=0.3, fy=0.3)
+        img_show = cv2.resize(frame, None, fx=0.5, fy=0.5)
         cv2.imshow("press q to quit", img_show)
         key = cv2.waitKey(1)
         if key == ord("q"):
             break
     cam.EndAcquisition()
     cv2.destroyAllWindows()
-
     # Retrieve, convert, and save image
     # config trigger for image acquisition
     result &= trigger_configuration(nodemap=nodemap,
                                     s_node_map=s_node_map,
                                     triggerType=triggerType,
                                     verbose=verbose)
-
     activate_trigger(nodemap)
     cam.BeginAcquisition()
 
+      
+
     if triggerType == "software":
+        
+        print("=================Trigger is setting to software================") 
         count = 0
-        start = perf_counter_ns()
         while count < num_images:
-            cam.TriggerSoftware.Execute()
-            ret, image_array = capture_image(cam)
+            try: 
+                start = perf_counter_ns()
+                cam.TriggerSoftware.Execute()
+                ret, image_array = capture_image(cam)
+                end = perf_counter_ns()
+                t = (end - start) / 1e9
+                print('time spent: %2.3f s' % t)
+                
+            except PySpin.SpinnakerException as ex:
+                print("Error %s"%ex)
+                ret=False
+                image_array = None
+                pass
+                
             if ret:
-                filename = 'Acquisition-%02d-%02d.tiff' % (acquisition_index, count)
+                filename = 'Acquisition-%04d.jpg' % count
                 save_path = os.path.join(savedir, filename)
                 cv2.imwrite(save_path, image_array)
                 print('Image saved at %s' % save_path)
-                count += 1
-                start = perf_counter_ns()
+                count+=1
             else:
                 print('Capture failed')
                 result = False
-        if count == 0:
-            result = False
-        end = perf_counter_ns()
-        t = (end - start) / 1e9
-        #print(end,start,t)
-        print('time spent: %2.3f s' % t)
+
     if triggerType == "hardware":
         count = 0
+        mtx = []
         start = perf_counter_ns()
         while count < num_images:
             try:
                 ret, image_array = capture_image(cam)
+                mtx.append(image_array)
+                end_time = perf_counter_ns()
+                print(end_time - start - 10000)
             except PySpin.SpinnakerException as ex:
                 print('Error: %s' % ex)
                 ret = False
                 image_array = None
                 pass
             if ret:
+                
                 print("extract successfully")
-                filename = 'Acquisition-%02d-%02d.jpg' % (acquisition_index, count)
+                filename = 'Acquisition-%02d-%03d.jpg' % (acquisition_index, count)
                 save_path = os.path.join(savedir, filename)
                 cv2.imwrite(save_path, image_array)
                 print('Image saved at %s' % save_path)
@@ -273,6 +295,7 @@ def acquire_images(cam,
             result = False
 
     cam.EndAcquisition()
+    setExposureMode(nodemap, "Timed")
     deactivate_trigger(nodemap)
 
     return result
@@ -314,8 +337,8 @@ def run_single_camera(cam,
                       acquisition_index,
                       num_images,
                       triggerType,
-                      frameRate=30,
-                      exposureTime=27084,
+                      frameRate=10,
+                      exposureTime=10000,
                       gain=0,
                       bufferCount=15,
                       timeout=10):
@@ -432,20 +455,40 @@ def clearDir(targetDir):
         print('The target directory is empty! No image file needs to be removed')
 
 
+# def get_IEnumeration_node_current_entry_name(nodemap, nodename, verbose=True):
+#     node = PySpin.CEnumerationPtr(nodemap.GetNode(nodename))
+#     node_int_val = node.GetIntValue()
+#     node_entry = node.GetEntry(node_int_val)
+#     node_entry_name = node_entry.GetSymbolic()
+#     if verbose:
+#         node_description = node.GetDescription()
+#         node_entries = node.GetEntries()  # node_entries is a list of INode instances
+#         print('%s: %s' % (nodename, node_entry_name))
+#         print(node_description)
+#         print('All entries are listed below:')
+#         for i, entry in enumerate(node_entries):
+#             entry_name = PySpin.CEnumEntryPtr(entry).GetSymbolic()
+#             print('%d: %s' % (i, entry_name))
+#         print('\n')
+#     return node_entry_name
+
 def get_IEnumeration_node_current_entry_name(nodemap, nodename, verbose=True):
     node = PySpin.CEnumerationPtr(nodemap.GetNode(nodename))
+    if not PySpin.IsAvailable(node) or not PySpin.IsReadable(node):
+        print(f"Node {nodename} is not available or not readable.")
+        return None  # Or handle it as needed
     node_int_val = node.GetIntValue()
     node_entry = node.GetEntry(node_int_val)
     node_entry_name = node_entry.GetSymbolic()
     if verbose:
         node_description = node.GetDescription()
-        node_entries = node.GetEntries()  # node_entries is a list of INode instances
-        print('%s: %s' % (nodename, node_entry_name))
+        node_entries = node.GetEntries()  # List of INode instances
+        print(f'{nodename}: {node_entry_name}')
         print(node_description)
         print('All entries are listed below:')
         for i, entry in enumerate(node_entries):
             entry_name = PySpin.CEnumEntryPtr(entry).GetSymbolic()
-            print('%d: %s' % (i, entry_name))
+            print(f'{i}: {entry_name}')
         print('\n')
     return node_entry_name
 
@@ -500,23 +543,24 @@ def get_IBoolean_node_current_val(nodemap, nodename, verbose=True):
     return node_val
 
 
-def disableOnBoardColorProcess(nodemap):
-    ptrOnBoardColorProcessEnabled = PySpin.CBooleanPtr(nodemap.GetNode("OnBoardColorProcessEnabled"))
-    if (not PySpin.IsAvailable(ptrOnBoardColorProcessEnabled)) or (not PySpin.IsWritable(ptrOnBoardColorProcessEnabled)):
-        print('Unable to retrieve OnBoardColorProcessEnabled. Aborting...')
-        return False
-    ptrOnBoardColorProcessEnabled.SetValue(False)
-    print('Set OnBoardColorProcessEnabled to False')
-    return True
+# def disableOnBoardColorProcess(nodemap):
+#     ptrOnBoardColorProcessEnabled = PySpin.CBooleanPtr(nodemap.GetNode("OnBoardColorProcessEnabled"))
+#     if (not PySpin.IsAvailable(ptrOnBoardColorProcessEnabled)) or (not PySpin.IsWritable(ptrOnBoardColorProcessEnabled)):
+#         print('Unable to retrieve OnBoardColorProcessEnabled. Aborting...')
+#         return False
+#     ptrOnBoardColorProcessEnabled.SetValue(False)
+#     print('Set OnBoardColorProcessEnabled to False')
+#     return True
 
 
 def enableFrameRateSetting(nodemap):
     # Turn off "AcquisitionFrameRateAuto"    
     acqFrameRateAuto = PySpin.CEnumerationPtr(nodemap.GetNode("AcquisitionFrameRateAuto"))
-    if (not PySpin.IsAvailable(acqFrameRateAuto)) or (not PySpin.IsWritable(acqFrameRateAuto)):
+    
+    if (not PySpin.IsAvailable(nodemap.GetNode("AcquisitionFrameRateEnable"))) or (not PySpin.IsWritable(nodemap.GetNode("AcquisitionFrameRateEnable"))):
         print('Unable to retrieve AcquisitionFrameRateAuto. Aborting...')
         return False
-    acqFrameRateAutoOff = acqFrameRateAuto.GetEntryByName('Off')
+    acqFrameRateAutoOff = acqFrameRateAuto.GetEntryByName('True')
     if (not PySpin.IsAvailable(acqFrameRateAutoOff)) or (not PySpin.IsReadable(acqFrameRateAutoOff)):
         print('Unable to set Buffer Handling mode (Value retrieval). Aborting...')
         return False
@@ -748,7 +792,7 @@ def setTriggerSelector(nodemap, TriggerSelectorToSet):
     nodemap:INodeMap
         Camara nodemap.
     TriggerSelectorToSet:str
-        TriggerSelectorEnums, must be one of {"FrameStart", "ExposureActive"}.
+        TriggerSelectorEnums, must be one of {"FrameStart", "AquisitionStart", "FrameStart"}.
 
     Returns
     -------
@@ -818,7 +862,7 @@ def setExposureTime(nodemap, exposureTime=None):
         result
     """
     # First set the exposure mode to "timed"
-    if not setExposureMode(nodemap, "Timed"):
+    if not setExposureMode(nodemap, "Timed"):  ## either Timed or TriggerWidth
         return False
     # Second disable the ExposureAuto
     if not disableExposureAuto(nodemap):
@@ -1080,20 +1124,22 @@ def trigger_configuration(nodemap, s_node_map, triggerType, verbose=True):
             result &= setExposureMode(nodemap, "Timed")
             result &= setTriggerSelector(nodemap, "FrameStart")
             result &= setStreamBufferHandlingMode(s_node_map, StreamBufferHandlingModeName='NewestOnly')
+            print("----------------------------------------------------------trigger type OFF return: ", result)
 
         if triggerType == 'software':
             result &= setTriggerSource(nodemap, "Software")
             result &= setExposureMode(nodemap, "Timed")
             result &= setTriggerSelector(nodemap, "FrameStart")
-            result &= setTriggerActivation(nodemap, "FallingEdge")
             result &= setStreamBufferHandlingMode(s_node_map, StreamBufferHandlingModeName='OldestFirst')
+            print("----------------------------------------------------------trigger type software return: ", result)
 
         if triggerType == 'hardware':
             result &= setTriggerSource(nodemap, "Line0")
             result &= setExposureMode(nodemap, "TriggerWidth")
-            result &= setTriggerSelector(nodemap, "ExposureActive")
+            result &= setTriggerSelector(nodemap, "FrameStart")
             result &= setTriggerActivation(nodemap, "FallingEdge")
-            result &= setStreamBufferHandlingMode(s_node_map, StreamBufferHandlingModeName='OldestFirst')
+            result &= setStreamBufferHandlingMode(s_node_map, StreamBufferHandlingModeName='NewestOnly')
+            print("----------------------------------------------------------trigger type hardware return: ", result)
 
     except PySpin.SpinnakerException as ex:
         print('Error: %s' % ex)
@@ -1101,7 +1147,7 @@ def trigger_configuration(nodemap, s_node_map, triggerType, verbose=True):
 
     if verbose:
         print('\n=================== Trigger status after configuration ==========================\n')
-        print_trigger_config(nodemap, s_node_map)
+        print_trigger_config(nodemap, s_node_map, triggerType)
 
     return result
 
@@ -1118,15 +1164,24 @@ def deactivate_trigger(nodemap):
 
 
 def print_camera_config(nodemap, s_node_map):
+    
+    """
+    To select using which function to find the correct node name, the type of 
+    node need to be verified. 3 of types in here:
+        1. IEnumeration_node
+        2. IFloat_node
+        3. IBoolean_node
+        
+    For some new node that not sure which type it is, in SpinView GUI, onder feature
+    section, right click node and select Display Node Information. On the pop-up window,
+    there is a section called type.
+    """
     get_IEnumeration_node_current_entry_name(nodemap, 'AcquisitionMode')
-    get_IBoolean_node_current_val(nodemap, 'OnBoardColorProcessEnabled')
-    get_IEnumeration_node_current_entry_name(nodemap, 'AcquisitionFrameRateAuto')
-    get_IBoolean_node_current_val(nodemap, 'AcquisitionFrameRateEnabled')
+    get_IBoolean_node_current_val(nodemap, 'AcquisitionFrameRateEnable')
     get_IFloat_node_current_val(nodemap, 'AcquisitionFrameRate')
-    get_IEnumeration_node_current_entry_name(nodemap, 'pgrExposureCompensationAuto')
-    get_IFloat_node_current_val(nodemap, 'pgrExposureCompensation')
+    get_IFloat_node_current_val(nodemap, 'AutoExposureEVCompensation')
     get_IEnumeration_node_current_entry_name(nodemap, 'ExposureAuto')
-    get_IFloat_node_current_val(nodemap, 'ExposureTime')
+    # get_IFloat_node_current_val(nodemap, 'ExposureTime')
     get_IEnumeration_node_current_entry_name(nodemap, 'GainAuto')
     get_IFloat_node_current_val(nodemap, 'Gain')
     get_IFloat_node_current_val(nodemap, 'BlackLevel')
@@ -1134,26 +1189,36 @@ def print_camera_config(nodemap, s_node_map):
     get_IInteger_node_current_val(s_node_map, 'StreamBufferCountManual')
 
 
-def print_trigger_config(nodemap, s_node_map):
-    get_IEnumeration_node_current_entry_name(nodemap, 'TriggerSource')
-    get_IEnumeration_node_current_entry_name(nodemap, 'ExposureMode')
-    get_IEnumeration_node_current_entry_name(nodemap, 'TriggerMode')
-    get_IEnumeration_node_current_entry_name(nodemap, 'TriggerSelector')
-    get_IEnumeration_node_current_entry_name(nodemap, 'TriggerActivation')
-    get_IEnumeration_node_current_entry_name(s_node_map, 'StreamBufferHandlingMode')
-    get_IBoolean_node_current_val(nodemap, 'TriggerDelayEnabled')
-    get_IFloat_node_current_val(nodemap, 'TriggerDelay')
+def print_trigger_config(nodemap, s_node_map, triggerType="software"):
+    if triggerType == 'software':
+        get_IEnumeration_node_current_entry_name(nodemap, 'TriggerSource')
+        get_IEnumeration_node_current_entry_name(nodemap, 'ExposureMode')
+        get_IEnumeration_node_current_entry_name(nodemap, 'TriggerMode')
+        get_IEnumeration_node_current_entry_name(nodemap, 'TriggerSelector')
+        get_IEnumeration_node_current_entry_name(s_node_map, 'StreamBufferHandlingMode')
+        get_IFloat_node_current_val(nodemap, 'TriggerDelay')
+        
+    if triggerType == 'hardware':
+        
+        get_IEnumeration_node_current_entry_name(nodemap, 'TriggerSource')
+        exp_mode = get_IEnumeration_node_current_entry_name(nodemap, 'ExposureMode')
 
+        # if exp_mode != "TriggerWidth":
+        get_IEnumeration_node_current_entry_name(nodemap, 'TriggerMode')
+        get_IEnumeration_node_current_entry_name(nodemap, 'TriggerSelector')
+        get_IEnumeration_node_current_entry_name(nodemap, 'TriggerActivation')
+        get_IEnumeration_node_current_entry_name(s_node_map, 'StreamBufferHandlingMode')
+        get_IFloat_node_current_val(nodemap, 'TriggerDelay')
 
 def main():
     acquisition_index = 0
-    num_images = 3
-    triggerType = "software"
-    result, system, cam_list, num_cameras = sysScan()
+    num_images = 15
+    triggerType = "hardware"
+    result, system, cam_list, num_camerasmeras = sysScan()
 
     if result:
         # Run example on each camera
-        savedir = r'E:\test2\calib_camera'
+        savedir = r"E:\test2\BFY"
         clearDir(savedir)
         for i, cam in enumerate(cam_list):
             print('Running example for camera %d...' % i)
@@ -1176,8 +1241,11 @@ def main():
         pass
     # Clear camera list before releasing system
     cam_list.Clear()
+   
     # Release system instance
     system.ReleaseInstance()
+    print("----------------HERE---------------------")
+
     return result
 
 
@@ -1186,3 +1254,36 @@ if __name__ == '__main__':
         sys.exit(0)
     else:
         sys.exit(1)
+        
+        
+#%%
+
+# acquisition_index = 0
+# num_images = 15
+# triggerType = "software"
+# result, system, cam_list, num_camerasmeras = sysScan()
+
+# if result:
+#     # Run example on each camera
+#     savedir = r"D:\images\test"
+#     clearDir(savedir)
+#     for i, cam in enumerate(cam_list):
+#         print('Running example for camera %d...' % i)
+        
+# cam.Init()
+    
+# nodemap = cam.GetNodeMap()
+# nodemap_tldevice = cam.GetTLDeviceNodeMap()
+# s_node_map = cam.GetTLStreamNodeMap()
+
+
+# frameRate=10
+# exposureTime=8333
+# gain=0
+# blackLevel=0
+# bufferCount=15
+# timeout=10
+# verbose=True
+
+
+
